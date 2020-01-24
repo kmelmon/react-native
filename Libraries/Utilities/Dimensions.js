@@ -35,6 +35,7 @@ class Dimensions {
       dims = JSON.parse(JSON.stringify(dims));
 
       const windowPhysicalPixels = dims.windowPhysicalPixels;
+      const screenPhysicalPixels = dims.screenPhysicalPixels;
       dims.window = {
         width: windowPhysicalPixels.width / windowPhysicalPixels.scale,
         height: windowPhysicalPixels.height / windowPhysicalPixels.scale,
@@ -43,7 +44,6 @@ class Dimensions {
       };
       if (Platform.OS === 'android') {
         // Screen and window dimensions are different on android
-        const screenPhysicalPixels = dims.screenPhysicalPixels;
         dims.screen = {
           width: screenPhysicalPixels.width / screenPhysicalPixels.scale,
           height: screenPhysicalPixels.height / screenPhysicalPixels.scale,
@@ -56,8 +56,15 @@ class Dimensions {
       } else {
         dims.screen = dims.window;
       }
+
+      dims.displayMask.left /= screenPhysicalPixels.scale;
+      dims.displayMask.top /= screenPhysicalPixels.scale;
+      dims.displayMask.width /= screenPhysicalPixels.scale;
+      dims.displayMask.height /= screenPhysicalPixels.scale;
+
       // delete so no callers rely on this existing
       delete dims.windowPhysicalPixels;
+
     }
 
     Object.assign(dimensions, dims);
@@ -66,6 +73,7 @@ class Dimensions {
       eventEmitter.emit('change', {
         window: dimensions.window,
         screen: dimensions.screen,
+        displayMask: dimensions.displayMask,
       });
     } else {
       dimensionsInitialized = true;

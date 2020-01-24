@@ -18,10 +18,17 @@ import android.content.Context;
 import android.os.Build;
 import android.util.DisplayMetrics;
 import android.view.Display;
+import android.view.Surface;
 import android.view.WindowManager;
+import android.view.View;
+import android.app.Activity;
 
 import com.facebook.infer.annotation.Assertions;
 import com.facebook.react.bridge.WritableNativeMap;
+
+import com.microsoft.device.display.DisplayMask;
+import android.graphics.Rect;
+import java.util.List;
 
 /**
  * Holds an instance of the current DisplayMetrics so we don't have to thread it through all the
@@ -36,6 +43,16 @@ public class DisplayMetricsHolder {
 
   private static @Nullable DisplayMetrics sWindowDisplayMetrics;
   private static @Nullable DisplayMetrics sScreenDisplayMetrics;
+  private static @Nullable DisplayMask sDisplayMask;
+  private static @Nullable Activity sActivity;
+  private static @Nullable Rect sVisibleWindowRect;
+
+  public static void setVisibleWindowRect(Rect visibleWindowRect) {
+    if (sVisibleWindowRect == null) {
+      sVisibleWindowRect = new Rect();
+    }
+    sVisibleWindowRect = visibleWindowRect;
+  }
 
   /**
    * @deprecated Use {@link #setScreenDisplayMetrics(DisplayMetrics)} instead. See comment above as
@@ -50,6 +67,9 @@ public class DisplayMetricsHolder {
       return;
     }
     initDisplayMetrics(context);
+    if (context.getPackageManager().hasSystemFeature("com.microsoft.device.display.displaymask")) {
+      sDisplayMask = DisplayMask.fromResourcesRectApproximation(context);
+    }
   }
 
   public static void initDisplayMetrics(Context context) {
@@ -113,6 +133,7 @@ public class DisplayMetricsHolder {
     final Map<String, Map<String, Object>> result = new HashMap<>();
     result.put("windowPhysicalPixels", getPhysicalPixelsMap(sWindowDisplayMetrics, fontScale));
     result.put("screenPhysicalPixels", getPhysicalPixelsMap(sScreenDisplayMetrics, fontScale));
+    result.put("displayMask", getDisplayMaskMap());
     return result;
   }
 
@@ -121,8 +142,10 @@ public class DisplayMetricsHolder {
         sWindowDisplayMetrics != null || sScreenDisplayMetrics != null,
         "DisplayMetricsHolder must be initialized with initDisplayMetricsIfNotInitialized or initDisplayMetrics");
     final WritableNativeMap result = new WritableNativeMap();
-    result.putMap("windowPhysicalPixels", getPhysicalPixelsNativeMap(sWindowDisplayMetrics, fontScale));
+//    result.putMap("windowPhysicalPixels", getPhysicalPixelsNativeMap(sWindowDisplayMetrics, fontScale));
+    result.putMap("windowPhysicalPixels", getKeithWindowPhysicalPixelsNativeMap(sWindowDisplayMetrics, fontScale));
     result.putMap("screenPhysicalPixels", getPhysicalPixelsNativeMap(sScreenDisplayMetrics, fontScale));
+    result.putMap("displayMask", getDisplayMaskNativeMap());
     return result;
   }
 
@@ -145,4 +168,64 @@ public class DisplayMetricsHolder {
     result.putDouble("densityDpi", displayMetrics.densityDpi);
     return result;
   }
+
+  private static WritableNativeMap getKeithWindowPhysicalPixelsNativeMap(DisplayMetrics displayMetrics, double fontScale) {
+    final WritableNativeMap result = new WritableNativeMap();
+    result.putInt("width", sVisibleWindowRect.width());
+    result.putInt("height", sVisibleWindowRect.height());
+    result.putDouble("scale", displayMetrics.density);
+    result.putDouble("fontScale", fontScale);
+    result.putDouble("densityDpi", displayMetrics.densityDpi);
+    return result;
+  }
+
+  private static Map<String, Object> getDisplayMaskMap() {
+    final Map<String, Object> result = new HashMap<>();
+    if (sDisplayMask != null) {
+      List<Rect> boundings = sDisplayMask.getBoundingRects();
+      Rect first = boundings.get(0);
+      result.put("left", first.left);
+      result.put("top", first.top);
+      result.put("width", first.width());
+      result.put("height", first.height());
+    }
+    else {
+      result.put("left", 0);
+      result.put("top", 0);
+      result.put("width", 0);
+      result.put("height", 0);
+    }
+    result.put("isAppSpanned", isAppSpanned());
+
+    return result;
+  }
+
+  private static WritableNativeMap getDisplayMaskNativeMap() {
+    final WritableNativeMap result = new WritableNativeMap();
+    if (sDisplayMask != null) {
+      List<Rect> boundings = sDisplayMask.getBoundingRects();
+      Rect first = boundings.get(0);
+      result.putInt("left", first.left - sVisibleWindowRect.left);
+      result.putInt("top", first.top - sVisibleWindowRect.top);
+      result.putInt("width", first.width());
+      result.putInt("height", first.height());
+    }
+    else {
+      result.putInt("left", 0);
+      result.putInt("top", 0);
+      result.putInt("width", 0);
+      result.putInt("height", 0);
+    }
+    result.putBoolean("isAppSpanned", isAppSpanned());
+    return result;
+  }
+
+  private static boolean isAppSpanned() {
+    if (sDisplayMask != null) {
+      return sWindowDisplayMetrics.widthPixels >= sScreenDisplayMetrics.widthPixels &&
+        sWindowDisplayMetrics.heightPixels >= sScreenDisplayMetrics.heightPixels;
+    }
+    return false;
+  }
+
 }
